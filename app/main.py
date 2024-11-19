@@ -90,7 +90,10 @@ def client_handler(conn: socket, addr):
                     response = f"${len(response_str)}\r\n{response_str}\r\n".encode()
                 case "GET":
                     response_str = get(data_list[1]) 
-                    response = f"${len(response_str)}\r\n{response_str}\r\n".encode()
+                    if response_str == None:
+                        response = f"$-1\r\n".encode()
+                    else:
+                        response = f"${len(response_str)}\r\n{response_str}\r\n".encode()
                 case "CONFIG":
                     cfg_cmd = data_list[1].upper()
                     parameter =  data_list[2]
@@ -103,8 +106,8 @@ def client_handler(conn: socket, addr):
                 case _:
                     response_str = data_list[-1]
 
-            if response_str == None:
-                response = f"$-1\r\n".encode()
+            # if response_str == None:
+                # response = f"$-1\r\n".encode()
             # else:
         conn.send(response)
     conn.close()
