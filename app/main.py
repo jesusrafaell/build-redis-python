@@ -79,6 +79,7 @@ def client_handler(conn: socket, addr):
             match command:
                 case "PING":
                     response_str = "PONG"
+                    response = f"${len(response_str)}\r\n{response_str}\r\n".encode()
                 case "ECHO":
                     response_str = data_list[-1]
                     response = f"${len(response_str)}\r\n{response_str}\r\n".encode()
@@ -86,20 +87,25 @@ def client_handler(conn: socket, addr):
                     key, value = data_list[1], data_list[2]
                     px = int(data_list[4]) if len(data_list) >= 5 and data_list[3].upper() == "PX" else None
                     set(key, value, px)
+                    response = f"${len(response_str)}\r\n{response_str}\r\n".encode()
                 case "GET":
                     response_str = get(data_list[1]) 
+                    response = f"${len(response_str)}\r\n{response_str}\r\n".encode()
                 case "CONFIG":
-                    if data_list[1].upper() == "GET":
-                        parameter =  data_list[2]
-                        response_str = config[parameter]
+                    cfg_cmd = data_list[1].upper()
+                    parameter =  data_list[2]
+                    res = ""
+                    if cfg_cmd == "GET":
+                        res = config[parameter]
+
+                    response = f"*2\r\n${len(parameter)}\r\n{parameter}\r\n${len(res)}\r\n{res}\r\n".encode()
+                    print(response)
                 case _:
                     response_str = data_list[-1]
 
             if response_str == None:
                 response = f"$-1\r\n".encode()
-            else:
-                response = f"${len(response_str)}\r\n{response_str}\r\n".encode()
-        # response = "*2\r\n$3\r\ndir\r\n$16\r\n/tmp/redis-files\r\n".encode()
+            # else:
         conn.send(response)
     conn.close()
 
