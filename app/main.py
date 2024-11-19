@@ -1,8 +1,21 @@
 import socket
 import _thread
+import sys
 import time
 
 storage = {}
+
+config = {
+    "dir": None,
+    "dbfilename": None
+}
+
+def parse_cli_args():
+    for i in range(1, len(sys.argv)):
+        if sys.argv[i] == "--dir":
+            config["dir"] = sys.argv[i + 1]
+        elif sys.argv[i] == "--dbfilename":
+            config["dbfilename"] = sys.argv[i + 1]
 
 def set(key, value, px=None):
     expiration = None
@@ -56,6 +69,7 @@ def client_handler(conn: socket, addr):
             break
 
         data_list = parse_resp(data)
+        command = data.decode().strip().split()
 
         print(f"data: {data_list}")
 
@@ -74,12 +88,18 @@ def client_handler(conn: socket, addr):
                     set(key, value, px)
                 case "GET":
                     response_str = get(data_list[1]) 
+                case "CONFIG":
+                    if data_list[1].upper() == "GET":
+                        parameter =  data_list[2]
+                        response_str = config[parameter]
                 case _:
                     response_str = data_list[-1]
+
             if response_str == None:
                 response = f"$-1\r\n".encode()
             else:
                 response = f"${len(response_str)}\r\n{response_str}\r\n".encode()
+        # response = "*2\r\n$3\r\ndir\r\n$16\r\n/tmp/redis-files\r\n".encode()
         conn.send(response)
     conn.close()
 
@@ -90,6 +110,7 @@ def accept_connectins(server_socket):
 
 
 def main():
+    parse_cli_args()
 
     server_socket = socket.create_server(("localhost", 6379), reuse_port=True)
 
