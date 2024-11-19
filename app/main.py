@@ -14,13 +14,13 @@ def set(key, value, px=None):
 
 def get(key):
     if key not in storage:
-        return ""
+        return None
 
     value, expiration = storage[key]
     if expiration and time.time() > expiration: 
         del storage[key]
         print(f"Key '{key}' has expired and was deleted.")
-        return ""
+        return None
 
     return value
 
@@ -73,10 +73,13 @@ def client_handler(conn: socket, addr):
                     px = int(data_list[4]) if len(data_list) >= 5 and data_list[3].upper() == "PX" else None
                     set(key, value, px)
                 case "GET":
-                    response_str = get(data_list[1])
+                    response_str = get(data_list[1]) 
                 case _:
                     response_str = data_list[-1]
-            response = f"${len(response_str)}\r\n{response_str}\r\n".encode()
+            if response_str == None:
+                response = f"$-1\r\n".encode()
+            else:
+                response = f"${len(response_str)}\r\n{response_str}\r\n".encode()
         conn.send(response)
     conn.close()
 
