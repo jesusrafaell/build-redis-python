@@ -1,13 +1,34 @@
 import socket
 import _thread
 
+def parse_resp(data):
+    """Parse RESP data into an array of strings."""
+    lines = data.decode().split("\r\n")
+    result = []
+
+    i = 1
+    while i < len(lines):
+        if lines[i].startswith("$"): 
+            result.append(lines[i + 1])
+            i += 2
+        else:
+            i += 1 
+
+    return result
+
+
 def client_handler(conn: socket, addr): 
     while True:
         data = conn.recv(1024)
         if not data: 
             print(f"Connection closed by {addr}")
             break
+        data_list = parse_resp(data)
+        print(f"data: {data_list}")
+
         response = "+PONG\r\n".encode()
+        if data_list and data_list[0].upper() == "ECHO":
+            response = data_list[-1].encode()
         conn.send(response)
     conn.close()
 
