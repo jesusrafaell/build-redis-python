@@ -14,13 +14,13 @@ def set(key, value, px=None):
 
 def get(key):
     if key not in storage:
-        return None
+        return ""
 
     value, expiration = storage[key]
     if expiration and time.time() > expiration: 
         del storage[key]
         print(f"Key '{key}' has expired and was deleted.")
-        return None
+        return ""
 
     return value
 
