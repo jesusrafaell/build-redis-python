@@ -28,7 +28,8 @@ def client_handler(conn: socket, addr):
 
         response = "+PONG\r\n".encode()
         if data_list and data_list[0].upper() == "ECHO":
-            response = data_list[-1].encode()
+            response_str = data_list[-1]
+            response = f"${len(response_str)}\r\n{response_str}\r\n".encode()
         conn.send(response)
     conn.close()
 
