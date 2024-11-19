@@ -1,6 +1,8 @@
 import socket
 import _thread
 
+storage = {}
+
 def parse_resp(data):
     """Parse RESP data into an array of strings."""
     lines = data.decode().split("\r\n")
@@ -27,8 +29,22 @@ def client_handler(conn: socket, addr):
         print(f"data: {data_list}")
 
         response = "+PONG\r\n".encode()
-        if data_list and data_list[0].upper() == "ECHO":
-            response_str = data_list[-1]
+        if data_list:
+            command = data_list[0].upper()
+            response_str = "OK"
+            match command:
+                case "ECHO":
+                    response_str = data_list[-1]
+                    response = f"${len(response_str)}\r\n{response_str}\r\n".encode()
+                case "SET": #create or update
+                    key = data_list[1]
+                    value = ' '.join(data_list[2:])
+                    print(f"Data", key, value)
+                    storage[key] = value
+                case "GET":
+                    response_str =  storage[data_list[1]]
+                case _:
+                    response_str = data_list[-1]
             response = f"${len(response_str)}\r\n{response_str}\r\n".encode()
         conn.send(response)
     conn.close()
