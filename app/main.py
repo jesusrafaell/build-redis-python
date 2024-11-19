@@ -1,10 +1,39 @@
 import socket
 import _thread
+import time
 
 storage = {}
 
+def set(key, value, px=None):
+    expiration = None
+    if px: 
+        expiration = time.time() + px / 1000  
+
+    storage[key] = (value, expiration)
+    print(f"Key '{key}' set with value '{value}' and expiration {expiration}")
+
+def get(key):
+    if key not in storage:
+        return None
+
+    value, expiration = storage[key]
+    if expiration and time.time() > expiration: 
+        del storage[key]
+        print(f"Key '{key}' has expired and was deleted.")
+        return None
+
+    return value
+
+def delete_expired_keys():
+    while True:
+        current_time = time.time()
+        keys_to_delete = [key for key, (_, exp) in storage.items() if exp and current_time > exp]
+        for key in keys_to_delete:
+            del storage[key]
+            print(f"Key '{key}' expired and was removed.")
+        time.sleep(1)  
+
 def parse_resp(data):
-    """Parse RESP data into an array of strings."""
     lines = data.decode().split("\r\n")
     result = []
 
@@ -40,11 +69,11 @@ def client_handler(conn: socket, addr):
                     response_str = data_list[-1]
                     response = f"${len(response_str)}\r\n{response_str}\r\n".encode()
                 case "SET": #create or update
-                    key = data_list[1]
-                    value = ' '.join(data_list[2:])
-                    storage[key] = value
+                    key, value = data_list[1], data_list[2]
+                    px = int(data_list[4]) if len(data_list) >= 5 and data_list[3].upper() == "PX" else None
+                    set(key, value, px)
                 case "GET":
-                    response_str =  storage[data_list[1]]
+                    response_str = get(data_list[1])
                 case _:
                     response_str = data_list[-1]
             response = f"${len(response_str)}\r\n{response_str}\r\n".encode()
