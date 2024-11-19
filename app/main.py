@@ -25,21 +25,23 @@ def client_handler(conn: socket, addr):
         if not data: 
             print(f"Connection closed by {addr}")
             break
+
         data_list = parse_resp(data)
+
         print(f"data: {data_list}")
 
-        response = "+PONG\r\n".encode()
         if data_list:
             command = data_list[0].upper()
             response_str = "OK"
             match command:
+                case "PING":
+                    response_str = "PONG"
                 case "ECHO":
                     response_str = data_list[-1]
                     response = f"${len(response_str)}\r\n{response_str}\r\n".encode()
                 case "SET": #create or update
                     key = data_list[1]
                     value = ' '.join(data_list[2:])
-                    print(f"Data", key, value)
                     storage[key] = value
                 case "GET":
                     response_str =  storage[data_list[1]]
