@@ -6,176 +6,192 @@ import struct
 import sys
 import time
 
-storage = {}
 
-config = {
-    "dir": None,
-    "dbfilename": None
-}
+class Redis:
+    dir: str
+    dbfilename: str
+    db = {}
 
-def parse_redis_file_format(file_format: str):
-    splited_parts = file_format.split("\\")
-    resizedb_index = splited_parts.index("xfb")
-    key_index = resizedb_index + 4
-    value_index = key_index + 1
-    key_bytes = splited_parts[key_index]
-    value_bytes = splited_parts[value_index]
-    key = remove_bytes_caracteres(key_bytes)
-    value = remove_bytes_caracteres(value_bytes)
-    print(f"{key, value}")
-    return key
+    def __init__(self, dir, dbfilename):
+        self.dir = dir
+        self.dbfilename = dbfilename
 
-def remove_bytes_caracteres(string: str) -> str:
-    if string.startswith("x"):
-        return string[3:]
-    elif string.startswith("t"):
-        return string[1:]
+    def _encode(self, msg: str):
+        res = f"+{msg}\r\n"
+        return res.encode()
+    
+    def ping(self):
+        return self._encode("PONG")
 
-def load_file(dir, dbfilename):
-    rdb_file_path = os.path.join(dir, dbfilename)
-    if os.path.exists(rdb_file_path):
-        with open(rdb_file_path, "rb") as rdb_file:
-            rdb_content = str(rdb_file.read())
-            print("rbd content",rdb_content)
-            if rdb_content:
-                key = parse_redis_file_format(rdb_content)
-                print("key", key)
-                return "*1\r\n${}\r\n{}\r\n".format(len(key), key).encode()
-    # If RDB file doesn't exist or no args provided, return
-    return "*0\r\n".encode()
+    def echo(self, value):
+        return self._encode(value)
+    
+    def set(self, key: str, value: str, px=None):
+        expiration = None
+        if px: 
+            expiration = time.time() + px / 1000  
 
-def get_keys(pattern: str) -> list[str]:
-    keys = fnmatch.filter(storage.keys(), pattern)
-    return keys
+        self.db[key] = (value, expiration)
+        print(f"Key '{key}' set with value '{value}' and expiration {expiration}")
+
+        return self._encode("OK")
+
+    def get(self, key: str) -> str:
+        print(f"-------------{key}")
+        if key not in self.db:
+            return b"$-1\r\n"
+
+        value, expiration = self.db[key]
+        if expiration and time.time() > expiration: 
+            del self.db[key]
+            print(f"Key '{key}' has expired and was deleted.")
+            return b"$-1\r\n"
+        
+        if value is None:
+            return b"$-1\r\n"
+        return self._encode(value)
+
+    def config(self, method):
+        if "get" in method:
+            key = "dir"
+            value = self.dir
+            return self.format_array_response([key, value])
+        else:
+            return b"*2\r\n$-1\r\n$-1\r\n"
 
 
-def format_array_response(values: list[str]) -> bytes:
-    response = f"*{len(values)}\r\n"
-    for value in values:
-        response += f"${len(value)}\r\n{value}\r\n"
-    return response.encode()
+    def remove_bytes_caracteres(string: str) -> str:
+        if string.startswith("x"):
+            return string[3:]
+        elif string.startswith("t"):
+            return string[1:]
 
-def format_response(value: str) -> bytes:
-    response = f"${len(value)}\r\n{value}\r\n"
-    return response.encode()
+
+    def parse_redis_file_format(self, file_format: str):
+        splited_parts = file_format.split("\\")
+        resizedb_index = splited_parts.index("xfb")
+        key_index = resizedb_index + 4
+        value_index = key_index + 1
+        key_bytes = splited_parts[key_index]
+        value_bytes = splited_parts[value_index]
+        key = self.remove_bytes_caracteres(key_bytes)
+        value = self.remove_bytes_caracteres(value_bytes)
+        print(f"{key, value}")
+        # storage
+        return key
+
+
+    def load_file(self):
+        rdb_file_path = os.path.join(self.dir, self.dbfilename)
+        if os.path.exists(rdb_file_path):
+            with open(rdb_file_path, "rb") as rdb_file:
+                rdb_content = str(rdb_file.read())
+                print("rbd content",rdb_content)
+                if rdb_content:
+                    key = self.parse_redis_file_format(rdb_content)
+                    print("key", key)
+                    return "*1\r\n${}\r\n{}\r\n".format(len(key), key).encode()
+        # If RDB file doesn't exist or no args provided, return
+        return "*0\r\n".encode()
+
+    def get_keys(self, pattern: str) -> list[str]:
+        keys = fnmatch.filter(self.db.keys(), pattern)
+        return keys
+
+
+    def format_array_response(self, values: list[str]) -> bytes:
+        response = f"*{len(values)}\r\n"
+        for value in values:
+            response += f"${len(value)}\r\n{value}\r\n"
+        return self._encode(response)
+
+    def format_response(self, value: str) -> bytes:
+        response = f"${len(value)}\r\n{value}\r\n"
+        return self._encode(response)
+
+    def delete_expired_keys(self):
+        while True:
+            current_time = time.time()
+            keys_to_delete = [key for key, (_, exp) in self.db.items() if exp and current_time > exp]
+            for key in keys_to_delete:
+                del self.db[key]
+                print(f"Key '{key}' expired and was removed.")
+            time.sleep(1)  
+    
+    def commands(self, command, args):
+        res = ""
+        match command.upper():
+            case "PING":
+                res =  self.ping()
+            case "ECHO":
+                res = self.echo(args[0])
+            case "SET":
+                px = int(args[3]) if len(args) >= 4 and args[2].upper() == "PX" else None
+                res = self.set(args[0], args[1], px)
+            case "GET":
+                res = self.get(args[0])
+            case "CONFIG":
+                res = self.config(args[1])
+            # case "KEYS":
+            #     keys = get_keys(data_list[1])
+            #     response = format_array_response(keys)
+            #     print(response)
+
+            case _:
+                res = self.echo(args[0])
+        return res
+
+
+
 
 def parse_cli_args():
+    dir, dbfilename = "", ""
     for i in range(1, len(sys.argv)):
         if sys.argv[i] == "--dir":
-            config["dir"] = sys.argv[i + 1]
+            dir = sys.argv[i + 1]
         elif sys.argv[i] == "--dbfilename":
-            config["dbfilename"] = sys.argv[i + 1]
+            dbfilename = sys.argv[i + 1]
+    return dir, dbfilename
 
-def set(key: str, value: str, px=None):
-    expiration = None
-    if px: 
-        expiration = time.time() + px / 1000  
-
-    storage[key] = (value, expiration)
-    print(f"Key '{key}' set with value '{value}' and expiration {expiration}")
-
-def get(key: str) -> str:
-    if key not in storage:
-        return None
-
-    value, expiration = storage[key]
-    if expiration and time.time() > expiration: 
-        del storage[key]
-        print(f"Key '{key}' has expired and was deleted.")
-        return None
-
-    return value
-
-def delete_expired_keys():
-    while True:
-        current_time = time.time()
-        keys_to_delete = [key for key, (_, exp) in storage.items() if exp and current_time > exp]
-        for key in keys_to_delete:
-            del storage[key]
-            print(f"Key '{key}' expired and was removed.")
-        time.sleep(1)  
-
-def parse_resp(data: str) -> list[str]:
-    lines = data.decode().split("\r\n")
-    result = []
-
-    i = 1
-    while i < len(lines):
-        if lines[i].startswith("$"): 
-            result.append(lines[i + 1])
-            i += 2
-        else:
-            i += 1 
-
-    return result
-
-def client_handler(conn: socket.socket, addr): 
+def client_handler(conn: socket.socket, addr, redis: Redis): 
     while True:
         data = conn.recv(1024)
         if not data: 
             print(f"Connection closed by {addr}")
             break
 
-        data_list = parse_resp(data)
-        command = data.decode().strip().split()
+        decode_msg = data.decode().strip().split()
+        args = [d for d in decode_msg if not d.startswith(("*", "$"))]
 
-        print(f"data: {data_list}")
+        print(f"data: {args}")
 
-        response_str = "OK"
-        if data_list:
-            command = data_list[0].upper()
-            match command:
-                case "PING":
-                    response = format_response("PONG")
-                case "ECHO":
-                    response = format_response(data_list[-1])
-                case "SET": #create or update
-                    key, value = data_list[1], data_list[2]
-                    px = int(data_list[4]) if len(data_list) >= 5 and data_list[3].upper() == "PX" else None
-                    set(key, value, px)
-                    response = format_response(response_str)
-                case "GET":
-                    response_str = get(data_list[1]) 
-                    if response_str == None:
-                        response = f"$-1\r\n".encode()
-                    else:
-                        response = format_response(response_str)
-                case "CONFIG":
-                    cfg_cmd = data_list[1].upper()
-                    parameter =  data_list[2]
-                    if cfg_cmd == "GET":
-                        res: str = config[parameter]
-                        # response = f"*2\r\n${len(parameter)}\r\n{parameter}\r\n${len(res)}\r\n{res}\r\n".encode()
-                        response = format_array_response([parameter, res])
-                    print(response)
-                case "KEYS":
-                    keys = get_keys(data_list[1])
-                    response = format_array_response(keys)
-                    print(response)
+        command = args[0]
+        args = args[1:]
 
-                case _:
-                    response = format_response(data_list[-1])
+        response =  redis.commands(command, args)
 
         conn.send(response)
     conn.close()
 
-def accept_connectins(server_socket: socket.socket):
+def accept_connectins(server_socket: socket.socket, redis: Redis):
     conn, addr = server_socket.accept()
     print(f"Connected to: {addr}")
-    _thread.start_new_thread(client_handler, (conn, addr))
+    _thread.start_new_thread(client_handler, (conn, addr, redis))
 
 
 def main():
-    parse_cli_args()
+    dir, dbfilename  = parse_cli_args()
 
-    load_file(config["dir"], config["dbfilename"])
+    redis = Redis(dir, dbfilename)
+
+    redis.load_file()
 
     server_socket = socket.create_server(("localhost", 6379), reuse_port=True)
 
     print(f'Server is listing')
     try:
         while True:
-            accept_connectins(server_socket)
+            accept_connectins(server_socket, redis)
     except KeyboardInterrupt:
         print("Caught keyboard interrupt, exiting")
     finally:
