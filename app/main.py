@@ -13,6 +13,23 @@ config = {
     "dbfilename": None
 }
 
+def read_size(file):
+    first_byte = ord(file.read(1))
+    if first_byte & 0b11000000 == 0b00000000:
+        return first_byte & 0b00111111
+    elif first_byte & 0b11000000 == 0b01000000:
+        second_byte = ord(file.read(1))
+        return ((first_byte & 0b00111111) << 8) | second_byte
+    elif first_byte & 0b11000000 == 0b10000000:
+        size_bytes = file.read(4)
+        return struct.unpack(">I", size_bytes)[0]
+    else:
+        raise ValueError("Unsupported size encoding")
+
+def decode_string(file):
+    length = read_size(file)
+    return file.read(length).decode('utf-8', errors='ignore')
+
 def load_rdb_file(dir, dbfilename):
     file_path = os.path.join(dir, dbfilename)
     if not os.path.exists(file_path):
@@ -20,35 +37,45 @@ def load_rdb_file(dir, dbfilename):
         return
 
     try:
-        with open(file_path, "rb")  as file:
+        with open(file_path, "rb") as file:
             header = file.read(9)
             if not header.startswith(b"REDIS"):
                 raise ValueError("Invalid RDB file format")
 
             while True:
-
-                entry_type = file.read(1)
-                if not entry_type:
+                marker = file.read(1)
+                if not marker:
                     break
 
-                if entry_type == b'\x00':
-
-                    key_length = struct.unpack("B", file.read(1))[0]
-                    key = file.read(key_length).decode('utf-8')
-
-                    value_length = struct.unpack("B", file.read(1))[0]
-                    value = file.read(value_length).decode('utf-8')
-
+                if marker == b'\xFE':
+                    db_index = read_size(file)  # Índice de la base de datos (puedes ignorarlo)
+                elif marker == b'\xFB':
+                    # Tamaños de tablas hash (ignorado en este ejemplo)
+                    hash_table_size = read_size(file)
+                    expiry_table_size = read_size(file)
+                elif marker == b'\x00':
+                    # Clave simple (sin expiración)
+                    key = decode_string(file)
+                    value = decode_string(file)
                     storage[key] = value
-
-                elif entry_type == b'\xFF': 
+                elif marker == b'\xFD' or marker == b'\xFC':
+                    # Clave con expiración (FD: segundos, FC: milisegundos)
+                    if marker == b'\xFD':
+                        expiry = struct.unpack("<I", file.read(4))[0]
+                    elif marker == b'\xFC':
+                        expiry = struct.unpack("<Q", file.read(8))[0]
+                    key = decode_string(file)
+                    value = decode_string(file)
+                    storage[key] = value  # Podrías almacenar también la expiración
+                elif marker == b'\xFF':
+                    # Fin del archivo
                     break
-
                 else:
-                    print(f"Unknown entry type: {entry_type}")
+                    print(f"Unknown marker: {marker}")
                     break
 
-        print(f"Loaded keys len:{len(list(storage.keys()))}")
+        print(f"Loaded {len(storage)} keys from RDB file: {list(storage.keys())}")
+
     except Exception as e:
         print(f"Error reading RDB: {e}")
 
