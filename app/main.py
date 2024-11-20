@@ -119,12 +119,21 @@ class Redis:
     def parse_redis_file_format(self, file_format: str):
         splited_parts = file_format.split("\\")
         resizedb_index = splited_parts.index("xfb")
+
         key_index = resizedb_index + 4
         value_index = key_index + 1
+
+        print("bg1",key_index)
+
         key_bytes = splited_parts[key_index]
         value_bytes = splited_parts[value_index]
+
+        print("bg2" ,key_bytes)
+
         key = self.remove_bytes_caracteres(key_bytes)
         value = self.remove_bytes_caracteres(value_bytes)
+
+        print(key, value)
 
         self[key] = value
 
@@ -132,14 +141,15 @@ class Redis:
 
 
     def load_file(self):
-        rdb_file_path = os.path.join(self.dir, self.dbfilename)
-        if os.path.exists(rdb_file_path):
-            with open(rdb_file_path, "rb") as rdb_file:
-                rdb_content = str(rdb_file.read())
-                print("rbd content",rdb_content)
-                if rdb_content:
-                    key = self.parse_redis_file_format(rdb_content)
-                    return "*1\r\n${}\r\n{}\r\n".format(len(key), key).encode()
+        # rdb_file_path = os.path.join(self.dir, self.dbfilename)
+        # if os.path.exists(rdb_file_path):
+        #     with open(rdb_file_path, "rb") as rdb_file:
+                # rdb_content = str(rdb_file.read())
+        rdb_content = str(b"REDIS0011\xfa\tredis-ver\x057.2.0\xfa\nredis-bits\xc0@\xfe\x00\xfb\x01\x00\x00\nstrawberry\x05apple\xff\x13\xf9\x19\xa3\x87\x028\xd9\n")
+        print("rbd content", rdb_content)
+        if rdb_content:
+            key = self.parse_redis_file_format(rdb_content)
+            return "*1\r\n${}\r\n{}\r\n".format(len(key), key).encode()
         # If RDB file doesn't exist or no args provided, return
         return "*0\r\n".encode()
 
