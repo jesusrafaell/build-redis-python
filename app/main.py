@@ -2,10 +2,8 @@ import fnmatch
 import os
 import socket
 import _thread
-import struct
 import sys
 import time
-
 
 class Redis:
     dir: str
