@@ -26,10 +26,10 @@ def load_rdb_file(dir, dbfilename):
                 if not length_bytes:
                     break
                 length = struct.unpack("<I", length_bytes)[0]
-                key = file.read(length).decode()
+                key = file.read(length).decode('utf-8')
                 length_bytes = file.read(4)
                 length = struct.unpack("<I", length_bytes)[0]
-                value = file.read(length).decode()
+                value = file.read(length).decode('utf-8')
                 storage[key] = value
         print(f"Loaded keys len:{len(list(storage.keys()))}")
     except Exception as e:
@@ -144,6 +144,7 @@ def client_handler(conn: socket.socket, addr):
                 case "KEYS":
                     keys = get_keys(data_list[1])
                     response = format_array_response(keys)
+                    print(response)
 
                 case _:
                     response = format_response(data_list[-1])
