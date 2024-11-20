@@ -51,8 +51,8 @@ class Redis:
             return b"$-1\r\n"
         return self._encode(value)
 
-    def config(self, method):
-        if "get" in method:
+    def config(self, method: str):
+        if "GET" in method.upper():
             key = "dir"
             value = self.dir
             return self.format_array_response([key, value])
@@ -101,7 +101,7 @@ class Redis:
             case "GET":
                 res = self.get(args[0])
             case "CONFIG":
-                res = self.config(args[1])
+                res = self.config(args[0])
             case "KEYS":
                 res = self.key(args[0] if len(args) > 0 else "*")
                 print(f"_____________________{res}")
@@ -144,7 +144,7 @@ class Redis:
                 if rdb_content:
                     key, value = self.parse_redis_file_format(rdb_content)
                     #save
-                    self.set(key, None)
+                    self.set(key, value)
         # If RDB file doesn't exist or no args provided, return
         return "*0\r\n".encode()
 
