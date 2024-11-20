@@ -144,7 +144,7 @@ class Redis:
                 if rdb_content:
                     key, value = self.parse_redis_file_format(rdb_content)
                     #save
-                    self.set(key, value)
+                    self.set(key, None)
         # If RDB file doesn't exist or no args provided, return
         return "*0\r\n".encode()
 
