@@ -1,3 +1,4 @@
+import fnmatch
 import socket
 import _thread
 import sys
@@ -10,6 +11,21 @@ config = {
     "dbfilename": None
 }
 
+def get_keys(pattern: str) -> list[str]:
+    keys = fnmatch.filter(storage.keys(), pattern)
+    return keys
+
+
+def format_array_response(values: list[str]) -> bytes:
+    response = f"*{len(values)}\r\n"
+    for value in values:
+        response += f"${len(value)}\r\n{value}\r\n"
+    return response.encode()
+
+def format_response(value: str) -> bytes:
+    response = f"${len(value)}\r\n{value}\r\n"
+    return response.encode()
+
 def parse_cli_args():
     for i in range(1, len(sys.argv)):
         if sys.argv[i] == "--dir":
@@ -17,7 +33,7 @@ def parse_cli_args():
         elif sys.argv[i] == "--dbfilename":
             config["dbfilename"] = sys.argv[i + 1]
 
-def set(key, value, px=None):
+def set(key: str, value: str, px=None):
     expiration = None
     if px: 
         expiration = time.time() + px / 1000  
@@ -25,7 +41,7 @@ def set(key, value, px=None):
     storage[key] = (value, expiration)
     print(f"Key '{key}' set with value '{value}' and expiration {expiration}")
 
-def get(key):
+def get(key: str) -> str:
     if key not in storage:
         return None
 
@@ -46,7 +62,7 @@ def delete_expired_keys():
             print(f"Key '{key}' expired and was removed.")
         time.sleep(1)  
 
-def parse_resp(data):
+def parse_resp(data: str) -> list[str]:
     lines = data.decode().split("\r\n")
     result = []
 
@@ -60,8 +76,7 @@ def parse_resp(data):
 
     return result
 
-
-def client_handler(conn: socket, addr): 
+def client_handler(conn: socket.socket, addr): 
     while True:
         data = conn.recv(1024)
         if not data: 
@@ -73,46 +88,44 @@ def client_handler(conn: socket, addr):
 
         print(f"data: {data_list}")
 
+        response_str = "OK"
         if data_list:
             command = data_list[0].upper()
-            response_str = "OK"
             match command:
                 case "PING":
-                    response_str = "PONG"
-                    response = f"${len(response_str)}\r\n{response_str}\r\n".encode()
+                    response = format_response("PONG")
                 case "ECHO":
-                    response_str = data_list[-1]
-                    response = f"${len(response_str)}\r\n{response_str}\r\n".encode()
+                    response = format_response(data_list[-1])
                 case "SET": #create or update
                     key, value = data_list[1], data_list[2]
                     px = int(data_list[4]) if len(data_list) >= 5 and data_list[3].upper() == "PX" else None
                     set(key, value, px)
-                    response = f"${len(response_str)}\r\n{response_str}\r\n".encode()
+                    response = format_response(response_str)
                 case "GET":
                     response_str = get(data_list[1]) 
                     if response_str == None:
                         response = f"$-1\r\n".encode()
                     else:
-                        response = f"${len(response_str)}\r\n{response_str}\r\n".encode()
+                        response = format_response(response_str)
                 case "CONFIG":
                     cfg_cmd = data_list[1].upper()
                     parameter =  data_list[2]
-                    res = ""
                     if cfg_cmd == "GET":
-                        res = config[parameter]
-
-                    response = f"*2\r\n${len(parameter)}\r\n{parameter}\r\n${len(res)}\r\n{res}\r\n".encode()
+                        res: str = config[parameter]
+                        # response = f"*2\r\n${len(parameter)}\r\n{parameter}\r\n${len(res)}\r\n{res}\r\n".encode()
+                        response = format_array_response([parameter, res])
                     print(response)
-                case _:
-                    response_str = data_list[-1]
+                case "KEYS":
+                    keys = get_keys(data_list[1])
+                    response = format_array_response(keys)
 
-            # if response_str == None:
-                # response = f"$-1\r\n".encode()
-            # else:
+                case _:
+                    response = format_response(data_list[-1])
+
         conn.send(response)
     conn.close()
 
-def accept_connectins(server_socket):
+def accept_connectins(server_socket: socket.socket):
     conn, addr = server_socket.accept()
     print(f"Connected to: {addr}")
     _thread.start_new_thread(client_handler, (conn, addr))
