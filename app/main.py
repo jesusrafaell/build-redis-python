@@ -21,6 +21,8 @@ def parse_redis_file_format(file_format: str):
     key_bytes = splited_parts[key_index]
     value_bytes = splited_parts[value_index]
     key = remove_bytes_caracteres(key_bytes)
+    value = remove_bytes_caracteres(value_bytes)
+    print(f"{key, value}")
     return key
 
 def remove_bytes_caracteres(string: str) -> str:
