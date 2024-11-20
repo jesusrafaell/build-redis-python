@@ -60,7 +60,7 @@ class Redis:
             return b"*2\r\n$-1\r\n$-1\r\n"
 
 
-    def remove_bytes_caracteres(string: str) -> str:
+    def remove_bytes_caracteres(self, string: str) -> str:
         if string.startswith("x"):
             return string[3:]
         elif string.startswith("t"):
@@ -140,8 +140,6 @@ class Redis:
             case _:
                 res = self.echo(args[0])
         return res
-
-
 
 
 def parse_cli_args():
