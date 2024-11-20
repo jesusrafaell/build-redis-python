@@ -23,7 +23,7 @@ def parse_redis_file_format(file_format: str):
     key = remove_bytes_caracteres(key_bytes)
     return key
 
-def remove_bytes_caracteres(string: str):
+def remove_bytes_caracteres(string: str) -> str:
     if string.startswith("x"):
         return string[3:]
     elif string.startswith("t"):
@@ -34,9 +34,10 @@ def load_file(dir, dbfilename):
     if os.path.exists(rdb_file_path):
         with open(rdb_file_path, "rb") as rdb_file:
             rdb_content = str(rdb_file.read())
-            print(rdb_content)
+            print("rbd content",rdb_content)
             if rdb_content:
                 key = parse_redis_file_format(rdb_content)
+                print("key", key)
                 return "*1\r\n${}\r\n{}\r\n".format(len(key), key).encode()
     # If RDB file doesn't exist or no args provided, return
     return "*0\r\n".encode()
