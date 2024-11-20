@@ -59,42 +59,12 @@ class Redis:
         else:
             return b"*2\r\n$-1\r\n$-1\r\n"
 
+    def key(self, key):
+        keys = self.filter_keys(key)
+        response = self.format_array_response(keys)
+        return response
 
-    def remove_bytes_caracteres(self, string: str) -> str:
-        if string.startswith("x"):
-            return string[3:]
-        elif string.startswith("t"):
-            return string[1:]
-
-
-    def parse_redis_file_format(self, file_format: str):
-        splited_parts = file_format.split("\\")
-        resizedb_index = splited_parts.index("xfb")
-        key_index = resizedb_index + 4
-        value_index = key_index + 1
-        key_bytes = splited_parts[key_index]
-        value_bytes = splited_parts[value_index]
-        key = self.remove_bytes_caracteres(key_bytes)
-        value = self.remove_bytes_caracteres(value_bytes)
-        print(f"{key, value}")
-        # storage
-        return key
-
-
-    def load_file(self):
-        rdb_file_path = os.path.join(self.dir, self.dbfilename)
-        if os.path.exists(rdb_file_path):
-            with open(rdb_file_path, "rb") as rdb_file:
-                rdb_content = str(rdb_file.read())
-                print("rbd content",rdb_content)
-                if rdb_content:
-                    key = self.parse_redis_file_format(rdb_content)
-                    print("key", key)
-                    return "*1\r\n${}\r\n{}\r\n".format(len(key), key).encode()
-        # If RDB file doesn't exist or no args provided, return
-        return "*0\r\n".encode()
-
-    def get_keys(self, pattern: str) -> list[str]:
+    def filter_keys(self, pattern: str) -> list[str]:
         keys = fnmatch.filter(self.db.keys(), pattern)
         return keys
 
@@ -103,7 +73,7 @@ class Redis:
         response = f"*{len(values)}\r\n"
         for value in values:
             response += f"${len(value)}\r\n{value}\r\n"
-        return self._encode(response)
+        return response.encode()
 
     def format_response(self, value: str) -> bytes:
         response = f"${len(value)}\r\n{value}\r\n"
@@ -132,24 +102,48 @@ class Redis:
                 res = self.get(args[0])
             case "CONFIG":
                 res = self.config(args[1])
-            # case "KEYS":
-            #     keys = get_keys(data_list[1])
-            #     response = format_array_response(keys)
-            #     print(response)
-
+            case "KEYS":
+                res = self.key(args[0] if len(args) > 0 else "*")
+                print(f"_____________________{res}")
             case _:
                 res = self.echo(args[0])
         return res
 
+    def remove_bytes_caracteres(self, string: str) -> str:
+        if string.startswith("x"):
+            return string[3:]
+        elif string.startswith("t"):
+            return string[1:]
 
-def parse_cli_args():
-    dir, dbfilename = "", ""
-    for i in range(1, len(sys.argv)):
-        if sys.argv[i] == "--dir":
-            dir = sys.argv[i + 1]
-        elif sys.argv[i] == "--dbfilename":
-            dbfilename = sys.argv[i + 1]
-    return dir, dbfilename
+
+    def parse_redis_file_format(self, file_format: str):
+        splited_parts = file_format.split("\\")
+        resizedb_index = splited_parts.index("xfb")
+        key_index = resizedb_index + 4
+        value_index = key_index + 1
+        key_bytes = splited_parts[key_index]
+        value_bytes = splited_parts[value_index]
+        key = self.remove_bytes_caracteres(key_bytes)
+        value = self.remove_bytes_caracteres(value_bytes)
+
+        self[key] = value
+
+        return key
+
+
+    def load_file(self):
+        rdb_file_path = os.path.join(self.dir, self.dbfilename)
+        if os.path.exists(rdb_file_path):
+            with open(rdb_file_path, "rb") as rdb_file:
+                rdb_content = str(rdb_file.read())
+                print("rbd content",rdb_content)
+                if rdb_content:
+                    key = self.parse_redis_file_format(rdb_content)
+                    return "*1\r\n${}\r\n{}\r\n".format(len(key), key).encode()
+        # If RDB file doesn't exist or no args provided, return
+        return "*0\r\n".encode()
+
+
 
 def client_handler(conn: socket.socket, addr, redis: Redis): 
     while True:
@@ -176,6 +170,14 @@ def accept_connectins(server_socket: socket.socket, redis: Redis):
     print(f"Connected to: {addr}")
     _thread.start_new_thread(client_handler, (conn, addr, redis))
 
+def parse_cli_args():
+    dir, dbfilename = "", ""
+    for i in range(1, len(sys.argv)):
+        if sys.argv[i] == "--dir":
+            dir = sys.argv[i + 1]
+        elif sys.argv[i] == "--dbfilename":
+            dbfilename = sys.argv[i + 1]
+    return dir, dbfilename
 
 def main():
     dir, dbfilename  = parse_cli_args()
