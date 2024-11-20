@@ -141,15 +141,15 @@ class Redis:
 
 
     def load_file(self):
-        # rdb_file_path = os.path.join(self.dir, self.dbfilename)
-        # if os.path.exists(rdb_file_path):
-        #     with open(rdb_file_path, "rb") as rdb_file:
-                # rdb_content = str(rdb_file.read())
-        rdb_content = str(b"REDIS0011\xfa\tredis-ver\x057.2.0\xfa\nredis-bits\xc0@\xfe\x00\xfb\x01\x00\x00\nstrawberry\x05apple\xff\x13\xf9\x19\xa3\x87\x028\xd9\n")
-        print("rbd content", rdb_content)
-        if rdb_content:
-            key = self.parse_redis_file_format(rdb_content)
-            return "*1\r\n${}\r\n{}\r\n".format(len(key), key).encode()
+        rdb_file_path = os.path.join(self.dir, self.dbfilename)
+        if os.path.exists(rdb_file_path):
+            with open(rdb_file_path, "rb") as rdb_file:
+                rdb_content = str(rdb_file.read())
+                print("rbd content", rdb_content)
+        # rdb_content = str(b"REDIS0011\xfa\tredis-ver\x057.2.0\xfa\nredis-bits\xc0@\xfe\x00\xfb\x01\x00\x00\nstrawberry\x05apple\xff\x13\xf9\x19\xa3\x87\x028\xd9\n")
+                if rdb_content:
+                    key = self.parse_redis_file_format(rdb_content)
+                    return "*1\r\n${}\r\n{}\r\n".format(len(key), key).encode()
         # If RDB file doesn't exist or no args provided, return
         return "*0\r\n".encode()
 
