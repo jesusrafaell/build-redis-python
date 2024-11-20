@@ -1,6 +1,8 @@
 import fnmatch
+import os
 import socket
 import _thread
+import struct
 import sys
 import time
 
@@ -10,6 +12,30 @@ config = {
     "dir": None,
     "dbfilename": None
 }
+
+def load_rdb_file(dir, dbfilename):
+    file_path = os.path.join(dir, dbfilename)
+    if not os.path.exists(file_path):
+        print(f"RDB file not found {dbfilename}")
+        return
+
+    try:
+        with open(file_path, "rb")  as file:
+            while True:
+                length_bytes = file.read(4)
+                if not length_bytes:
+                    break
+                length = struct.unpack("<I", length_bytes)[0]
+                key = file.read(length).decode()
+                length_bytes = file.read(4)
+                length = struct.unpack("<I", length_bytes)[0]
+                value = file.read(length).decode()
+                storage[key] = value
+        print(f"Loaded keys len:{len(list(storage.keys()))}")
+    except Exception as e:
+        print(f"Error reading RDB: {e}")
+
+
 
 def get_keys(pattern: str) -> list[str]:
     keys = fnmatch.filter(storage.keys(), pattern)
@@ -133,6 +159,8 @@ def accept_connectins(server_socket: socket.socket):
 
 def main():
     parse_cli_args()
+
+    load_rdb_file(config["dir"], config["dbfilename"])
 
     server_socket = socket.create_server(("localhost", 6379), reuse_port=True)
 
